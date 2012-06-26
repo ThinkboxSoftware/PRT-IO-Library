@@ -1,0 +1,1 @@
+cl /I . /I C:\FranticDev\zlib\include\ /I C:\FranticDev\openexr\include\ /EHsc /O2 /MD /W4 /D _CRT_SECURE_NO_WARNINGS example.cpp /link /LIBPATH:C:\FranticDev\zlib\lib-x64\ /LIBPATH:C:\FranticDev\openexr\lib-vc80-x64\ zlibstat.lib half.lib /MACHINE:x64

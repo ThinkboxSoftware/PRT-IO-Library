@@ -71,6 +71,14 @@ public:
 	{}
 
 	/**
+	 * Retrieve the channel layout information
+	 * @return A constant reference to prt_layout
+	 */
+	const prt_layout& layout() const {
+		return m_layout;
+	}
+
+	/**
 	 * Determines if the stream's particles have a channel with the given name
 	 * @param name The name of the channel to look for.
 	 * @return True if a channel with the given name is found, false otherwise.

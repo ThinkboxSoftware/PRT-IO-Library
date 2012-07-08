@@ -15,3 +15,9 @@ TARGET_LINK_LIBRARIES ( example
   ${Ilmbase_HALF_LIBRARY}
   ${ZLIB_LIBRARY}
 )
+
+ADD_EXECUTABLE ( layout layout.cpp )
+TARGET_LINK_LIBRARIES ( layout
+  ${Ilmbase_HALF_LIBRARY}
+  ${ZLIB_LIBRARY}
+)

@@ -21,3 +21,16 @@ TARGET_LINK_LIBRARIES ( layout
   ${Ilmbase_HALF_LIBRARY}
   ${ZLIB_LIBRARY}
 )
+
+INSTALL ( FILES
+  prtio/detail/conversion.hpp
+  prtio/detail/data_types.hpp
+  prtio/detail/prt_header.hpp
+  prtio/prt_ifstream.hpp
+  prtio/prt_istream.hpp
+  prtio/prt_layout.hpp
+  prtio/prt_ofstream.hpp
+  prtio/prt_ostream.hpp
+  DESTINATION
+  ./include/prtio
+)

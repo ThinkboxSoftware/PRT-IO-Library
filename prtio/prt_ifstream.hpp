@@ -163,6 +163,14 @@ public:
 	}
 
 	/**
+	 * The number of particles remaining in the file.
+	 */
+	detail::prt_int64 particle_count() const
+	{
+		return m_particleCount;
+	}
+
+	/**
 	 * Closes the stream, and deallocates any memory used for decompressing particles.
 	 */
 	void close(){

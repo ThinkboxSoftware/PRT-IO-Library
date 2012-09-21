@@ -29,7 +29,7 @@
 #define INT64 long long
 #endif
 
-void example_reading( const std::string& filePath ){
+void layout_reading( const std::string& filePath ){
 	struct{
 		float pos[3];
 		float vel[3];
@@ -40,34 +40,63 @@ void example_reading( const std::string& filePath ){
 
 	prtio::prt_ifstream stream( filePath );
 
-	//We demand a "Position" channel exist, otherwise it throws an exception.
-	stream.bind( "Position", theParticle.pos, 3 );
+	const prtio::prt_layout& layout = stream.layout();
 
-	if( stream.has_channel( "Velocity" ) )
-		stream.bind( "Velocity", theParticle.vel, 3 );
-	if( stream.has_channel( "Color" ) )
-		stream.bind( "Color", theParticle.col, 3 );
-	if( stream.has_channel( "Density" ) )
-		stream.bind( "Density", &theParticle.density, 1 );
-	if( stream.has_channel( "ID" ) )
-		stream.bind( "ID", &theParticle.id, 1 );
-
-	std::size_t counter = 0;
-	while( stream.read_next_particle() ){
-		++counter;
-
-		std::cout << "Particle #" << counter << " w/ ID: " << theParticle.id << '\n';
-		std::cout << "\tPosition: [" << theParticle.pos[0] << ", " << theParticle.pos[1] << ", " << theParticle.pos[2] << "]\n";
-		std::cout << "\tVelocity: [" << theParticle.vel[0] << ", " << theParticle.vel[1] << ", " << theParticle.vel[2] << "]\n";
-		std::cout << "\tColor: [" << theParticle.col[0] << ", " << theParticle.col[1] << ", " << theParticle.col[2] << "]\n";
-		std::cout << "\tDensity: " << theParticle.density << '\n';
-		std::cout << std::endl;
+	size_t numChannels = layout.num_channels();
+	for (size_t i=0;i<numChannels;i++)
+	{
+		std::cout << "Channel name found = "
+				<< layout.get_channel_name(i).c_str()
+				<< std::endl;
+		const prtio::detail::prt_channel& channel = layout.get_channel(layout.get_channel_name(i));
+		std::cout << "Channel arity = " << channel.arity << std::endl;
+		std::cout << "Channel offset = " << channel.offset << std::endl;
+		std::string type_name;
+		switch (channel.type)
+		{
+		case prtio::data_types::type_int16 :
+			type_name = "int16";
+			break;
+		case prtio::data_types::type_int32 :
+			type_name = "int32";
+			break;
+		case prtio::data_types::type_int64 :
+			type_name = "int64";
+			break;
+		case prtio::data_types::type_float16 :
+			type_name = "float16";
+			break;
+		case prtio::data_types::type_float32 :
+			type_name = "float32";
+			break;
+		case prtio::data_types::type_float64 :
+			type_name = "float64";
+			break;
+		case prtio::data_types::type_uint16 :
+			type_name = "uint16";
+			break;
+		case prtio::data_types::type_uint32 :
+			type_name = "uint32";
+			break;
+		case prtio::data_types::type_uint64 :
+			type_name = "uint64";
+			break;
+		case prtio::data_types::type_int8 :
+			type_name = "int8";
+			break;
+		case prtio::data_types::type_uint8 :
+			type_name = "uint8";
+			break;
+		default:
+			type_name = "UNKNOWN CHANNEL TYPE";
+			break;
+		}
+		std::cout << "Channel type = " << type_name.c_str() << std::endl;
 	}
-
 	stream.close();
 }
 
-void example_writing( const std::string& filePath ){
+void layout_writing( const std::string& filePath ){
 	struct{
 		float pos[3];
 		float col[3];
@@ -109,10 +138,10 @@ void example_writing( const std::string& filePath ){
 int main( int /*argc*/, char* /*argv*/[] ){
 	try{
 		std::cout << "Writing to particles_0020.prt" << std::endl;
-		example_writing( "particles_0020.prt" );
+		layout_writing( "particles_0020.prt" );
 
 		std::cout << "Reading from particles_0020.prt" << std::endl;
-		example_reading( "particles_0020.prt" );
+		layout_reading( "particles_0020.prt" );
 
 		return 0;
 	}catch( const std::exception& e ){

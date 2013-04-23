@@ -21,6 +21,8 @@
 
 #include <prtio/prt_istream.hpp>
 #include <prtio/detail/prt_header.hpp>
+#include <prtio/detail/any_io.hpp>
+#include <cassert>
 #include <fstream>
 #include <zlib.h>
 
@@ -38,7 +40,7 @@ class prt_ifstream : public prt_istream{
 	std::size_t m_bufferSize; //The size of 'm_buffer' in bytes.
 
 	detail::prt_int64 m_particleCount; //The number of particles remaining in the file.
-
+	
 private:
 	/**
 	 * This function reads the uncompressed header portion of the PRT file and leaves the read pointer
@@ -48,6 +50,8 @@ private:
 	void read_header(){
 		using namespace detail;
 
+		std::istream::streampos headerStart = m_fin.tellg();
+		
 		prt_header_v1 header;
 		m_fin.read(reinterpret_cast<char*>(&header), sizeof(prt_header_v1));
 
@@ -62,10 +66,58 @@ private:
 		m_particleCount = header.particleCount;
 		if( header.particleCount < 0 )
 			throw std::runtime_error( "The input stream \"" + m_filePath + "\" was not closed correctly and reported negative particles within." );
+		
+		if( header.version < 2 ){
+			// Skip parts of the file header which may have been added since the first version of the .prt format
+			if( header.headerLength != sizeof(prt_header_v1) )
+				m_fin.seekg(header.headerLength - sizeof(prt_header_v1), std::ios::cur);
+		}else{
+			// Read the metadata section.
+			prt_int32 metadataCount, perMetadataSize;
+			m_fin.read( reinterpret_cast<char*>( &metadataCount ), sizeof(prt_int32) );
+			m_fin.read( reinterpret_cast<char*>( &perMetadataSize ), sizeof(prt_int32) );
+			
+			for( prt_int32 i = 0; i < metadataCount; ++i ){
+				char name[33]; // One extra for a null character if it was missing.
+				prt_int32 type, arity;
+				
+				m_fin.read( name, 32 );
+				m_fin.read( reinterpret_cast<char*>( &type ), sizeof(prt_int32) );
+				m_fin.read( reinterpret_cast<char*>( &arity ), sizeof(prt_int32) );
 
-		// Skip parts of the file header which may have been added since the first version of the .prt format
-		if( header.headerLength != sizeof(prt_header_v1) )
-			m_fin.seekg(header.headerLength - sizeof(prt_header_v1), std::ios::cur);
+				if( perMetadataSize != 40u )
+					m_fin.seekg(perMetadataSize - 40u, std::ios::cur);	//Skip unknown parts of the metadata definition
+				
+				name[32] = '\0';
+				
+				if( type < -1 || type >= data_types::type_count )
+					throw std::runtime_error( std::string() + "The data type specified in metadata \"" + name + "\" in the input stream \"" + m_filePath + "\" is not valid." );
+
+				if( arity < 0 )
+					throw std::runtime_error( std::string() + "The arity specified in metadata \"" + name + "\" in the input stream \"" + m_filePath + "\" is not valid." );
+				
+				detail::any& val = m_metadata[ name ];
+				
+				assert( val.empty() );
+				
+				detail::read_any( val, m_fin, type, arity );
+			}
+
+			std::map< std::string, detail::any >::iterator it = m_metadata.find( "BoundBox" );
+			if( it != m_metadata.end() ){
+				std::vector<float>& boundsData = it->second.get< std::vector<float> >();
+
+				// If any of the bounds are NaN we can't use the boundbox. Comparing NaN to itself will always return false so I compare the range to itself.
+				if( boundsData.size() != 6u || !std::equal( boundsData.begin(), boundsData.end(), boundsData.begin() ) )
+					m_metadata.erase( it );
+			}
+			
+			std::istream::streampos headerEnd = m_fin.tellg();
+
+			// Skip parts of the file header which may have been added since the second version of the .prt format
+			if( header.headerLength != headerEnd - headerStart )
+				m_fin.seekg(header.headerLength - headerEnd + headerStart, std::ios::cur);
+		}
 
 		prt_int32 attrLength;
 		m_fin.read(reinterpret_cast<char*>(&attrLength), 4);

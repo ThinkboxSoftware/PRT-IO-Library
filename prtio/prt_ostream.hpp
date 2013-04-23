@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <prtio/detail/any.hpp>
 #include <prtio/detail/conversion.hpp>
 #include <prtio/detail/data_types.hpp>
 #include <prtio/prt_layout.hpp>
@@ -45,10 +46,13 @@ class prt_ostream{
 
 	//A list of all channels that we want to extract
 	std::vector< bound_channel > m_boundChannels;
-
+	
 protected:
 	//The layout of the particle data from the source (ex. PRT file).
 	prt_layout m_layout;
+	
+	//The metadata associated with the particle stream.
+	std::map< std::string, detail::any > m_metadata;
 
 	/**
 	 * This abstract function provides the interface for subclasses to consume a single particle.
@@ -64,6 +68,61 @@ public:
 
 	virtual ~prt_ostream()
 	{}
+	
+	/**
+	 * Stores a numeric metadata value.
+	 * \param name The metadata name. Must match the regular expression [a-zA-Z_][0-9a-zA-Z_]* and be less than 32 characters long 
+	 * \param value A pointer to the array of values to store.
+	 * \param arity The number of values from the array to store.
+	 */
+	template <typename T>
+	void add_metadata( const std::string& name, const T value[], std::size_t arity ){
+		if( !detail::is_valid_name( name ) )
+			throw std::runtime_error( "Invalid metadata name \"" + name + "\"" );
+		
+		detail::any& val = m_metadata[ name ];
+		
+		assert( val.empty() );
+		
+		val.set( std::vector<T>() );
+		val.get< std::vector<T> >().assign( value, value + arity );
+	}
+	
+#ifdef _WIN32
+	/**
+	 * Stores a metadata string value. On Windows, string values must be encoded via UTF-16 since UTF-8 is not supported.
+	 * \param name The metadata name. Must match the regular expression [a-zA-Z_][0-9a-zA-Z_]* and be less than 32 characters long
+	 * \param utf16StringVal The metadata value, encoded via UTF-16. The value will be stored in UTF-8 encoding on disk.
+	 */
+	void add_metadata( const std::string& name, const std::wstring& utf16StringVal ){
+		if( !detail::is_valid_name( name ) )
+			throw std::runtime_error( "Invalid metadata name \"" + name + "\"" );
+	
+		detail::any& val = m_metadata[ name ];
+		
+		assert( val.empty() );
+		
+		val.set( std::wstring() );
+		val.get< std::wstring >() = utf16StringVal;
+	}
+#else
+	/**
+	 * Stores a metadata string value that is encoded via UTF-8.
+	 * \param name The metadata name. Must match the regular expression [a-zA-Z_][0-9a-zA-Z_]* and be less than 32 characters long
+	 * \param utf8StringVal The metadata value, encoded via UTF-8.
+	 */
+	void add_metadata( const std::string& name, const std::string& utf8StringVal ){
+		if( !detail::is_valid_name( name ) )
+			throw std::runtime_error( "Invalid metadata name \"" + name + "\"" );
+		
+		detail::any& val = m_metadata[ name ];
+		
+		assert( val.empty() );
+		
+		val.set( std::string() );
+		val.get< std::string >() = utf8StringVal;
+	}
+#endif
 
 	/**
 	 * This template function will bind a user-supplied variable to a named channel to be written to a prt_ostream

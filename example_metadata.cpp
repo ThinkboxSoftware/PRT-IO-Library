@@ -22,12 +22,41 @@
 #include <iostream>
 #include <prtio/prt_ifstream.hpp>
 #include <prtio/prt_ofstream.hpp>
+#include <prtio/prt_metadata.hpp>
 
 #if !defined(__APPLE__) && !defined(_WIN32) && !defined(_WIN64) && __WORDSIZE == 64
 #define INT64 long int
 #else
 #define INT64 long long
 #endif
+
+#ifdef _WIN32
+typedef std::wstring unicode_string;
+
+#define NOMINMAX
+#include <Windows.h>
+
+#define _T( string ) L ## string
+
+std::ostream& operator<<( std::ostream& ostream, const std::wstring& wstr ){
+	// Use CP_OEMCP since this is a console app, not a GUI app.
+	int r = WideCharToMultiByte( CP_OEMCP, 0, wstr.c_str(), static_cast<int>( wstr.size() ), NULL, 0, NULL, NULL );
+	if( r > 0 ){
+		std::string str( static_cast<std::size_t>( r ), '\0' );
+		
+		r = WideCharToMultiByte( CP_OEMCP, 0, wstr.c_str(), static_cast<int>( wstr.size() ), &str[0], r, NULL, NULL );
+		if( r > 0 )
+			ostream << str;
+	}
+	
+	return ostream;
+}
+#else
+typedef std::string unicode_string;
+
+#define _T( string ) string
+#endif
+
 
 void example_reading( const std::string& filePath ){
 	struct{
@@ -40,6 +69,30 @@ void example_reading( const std::string& filePath ){
 
 	prtio::prt_ifstream stream( filePath );
 
+	prtio::coordinate_system::option coordSys = prtio::get_coordinate_system( stream );
+	prtio::distance_unit::option distanceUnit = prtio::get_distance_unit( stream );
+	
+	std::cout << "\tCoordSys = " << prtio::coordinate_system::to_string( coordSys ) << std::endl;
+	std::cout << "\tDistanceUnit = " << prtio::distance_unit::to_string( distanceUnit ) << std::endl;
+	
+	unsigned framerate[] = { 1, 1 };
+
+	if( prtio::get_framerate( stream, framerate ) )
+		std::cout << "\tFrameRate = {" << framerate[0] << ", " << framerate[1] << "}" << std::endl;
+	
+	float boundbox[][3] = { {0.f, 0.f, 0.f}, {0.f, 0.f, 0.f} };
+	
+	if( prtio::get_boundbox( stream, boundbox[0], boundbox[1] ) )
+		std::cout << "\tBoundbox = { {"
+			<< boundbox[0][0] << ", " << boundbox[0][1] << ", " << boundbox[0][2] << "} to {"
+			<< boundbox[1][0] << ", " << boundbox[1][1] << ", " << boundbox[1][2] << "} }"
+			<< std::endl;
+	
+	if( const unicode_string* pAuthor = stream.get_metadata_string( "Author" ) )
+		std::cout << "\tAuthor = " << *pAuthor << std::endl;
+	if( const unicode_string* pAuthor2 = stream.get_metadata_string( "Author_2" ) )
+		std::cout << "\tAuthor_2 = " << *pAuthor2 << std::endl;
+	
 	//We demand a "Position" channel exist, otherwise it throws an exception.
 	stream.bind( "Position", theParticle.pos, 3 );
 
@@ -75,12 +128,23 @@ void example_writing( const std::string& filePath ){
 		unsigned short id;
 	} theParticle;
 
-	const int NUM_PARTICLES = 791;
+	const int NUM_PARTICLES = 2;
 
 	std::srand( (unsigned)std::time(NULL) );
 
 	prtio::prt_ofstream stream;
 
+	unicode_string author = _T("John Smith");
+	unicode_string author2 = _T("Joh\x00F1 \"\x03A6\" Smythe");
+	
+	prtio::set_coordinate_system( stream, prtio::coordinate_system::right_handed_zup );
+	prtio::set_distance_unit( stream, prtio::distance_unit::meters );
+	prtio::set_framerate( stream, 30, 1 );
+	
+	stream.add_metadata( "Author", author );
+	stream.add_metadata( "Author_2", author2 );
+	//stream.add_metadata( "A\x97thor", author );
+	
 	stream.bind( "Position", theParticle.pos, 3 );
 	stream.bind( "Color", theParticle.col, 3, prtio::data_types::type_float16 ); //Convert it to half on the fly.
 	stream.bind( "Density", &theParticle.density, 1 );
@@ -108,11 +172,11 @@ void example_writing( const std::string& filePath ){
 
 int main( int /*argc*/, char* /*argv*/[] ){
 	try{
-		std::cout << "Writing to particles_0020.prt" << std::endl;
-		example_writing( "particles_0020.prt" );
+		std::cout << "Writing to particles_0025.prt" << std::endl;
+		example_writing( "particles_0025.prt" );
 
-		std::cout << "Reading from particles_0020.prt" << std::endl;
-		example_reading( "particles_0020.prt" );
+		std::cout << "Reading from particles_0025.prt" << std::endl;
+		example_reading( "particles_0025.prt" );
 
 		return 0;
 	}catch( const std::exception& e ){

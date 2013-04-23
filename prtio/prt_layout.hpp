@@ -21,6 +21,7 @@
 #include <prtio/detail/data_types.hpp>
 
 #include <exception>
+#include <locale>
 #include <map>
 #include <string>
 #include <stdexcept>
@@ -37,6 +38,28 @@ namespace detail{
 		std::size_t offset, arity;
 		data_types::enum_t type;
 	};
+	
+	//Valid names match the regular exrpession [a-zA-Z_][0-9a-zA-Z_]*
+	bool is_valid_name( const std::string& name ){
+		// We only allow the standard C locale for characters in names. This means single byte characters with value less than 127.
+		std::locale loc( "C" );
+		
+		std::string::const_iterator it = name.begin(), itEnd = name.end();
+		if( it == itEnd )
+			return false;
+		
+		if( !std::isalpha(*it, loc) && *it != '_' )
+			return false;
+		
+		++it;
+		
+		for( ; it != itEnd; ++it ){
+			if( !std::isalnum(*it, loc) && *it != '_' )
+				return false;
+		}
+		
+		return true;
+	}
 }//namespace detail
 
 /**
@@ -65,6 +88,9 @@ public:
 	 * @param offset The channel;'s offset in bytes from the beginning of the particle.
 	 */
 	void add_channel( const std::string& name, data_types::enum_t type, std::size_t arity, std::size_t offset ){
+		if( !detail::is_valid_name( name ) )
+			throw std::runtime_error( "Invalid channel name \"" + name + "\"" );
+		
 		std::map<std::string, detail::prt_channel>::iterator it = m_channelMap.find( name );
 		if( it != m_channelMap.end() )
 			throw std::runtime_error( "Duplicate channel \"" + name + "\" detected" );

@@ -1,5 +1,5 @@
 /**
- * Copyright 2012 Thinkbox Software Inc.
+ * Copyright 2013 Thinkbox Software Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  *
  * This file contains samples of how the library should be used to generate
- * and read data from PRT files.
+ * and read metadata associated with PRT files.
  */
 
 #include <cstdlib>

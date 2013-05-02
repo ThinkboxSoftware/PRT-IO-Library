@@ -45,12 +45,10 @@ namespace distance_unit{
 namespace coordinate_system{
 	enum option{
 		unspecified,
-		left_handed_xup,
-		left_handed_yup,
-		left_handed_zup,
-		right_handed_xup,
 		right_handed_yup,
 		right_handed_zup,
+		left_handed_yup,
+		left_handed_zup,
 		invalid
 	};
 	
@@ -64,7 +62,7 @@ namespace coordinate_system{
 	};
 	
 	inline const char* to_string( option sysType ){
-		static const char* names[] = { "unspecified", "left_handed_xup", "left_handed_yup", "left_handed_zup", "right_handed_xup", "right_handed_yup", "right_handed_zup", "invalid" };
+		static const char* names[] = { "unspecified", "right_handed_yup", "right_handed_zup", "left_handed_yup", "left_handed_zup", "invalid" };
 		
 		return names[sysType];
 	}

@@ -52,7 +52,8 @@ private:
 
 		std::istream::streampos headerStart = m_fin.tellg();
 		
-		prt_header_v1 header;
+		prt_header_v2 header;
+		memset( &header, 0, sizeof(prt_header_v2) );
 		m_fin.read(reinterpret_cast<char*>(&header), sizeof(prt_header_v1));
 
 		//This is not a prt file (as opposed to a corrupt prt file);
@@ -67,17 +68,12 @@ private:
 		if( header.particleCount < 0 )
 			throw std::runtime_error( "The input stream \"" + m_filePath + "\" was not closed correctly and reported negative particles within." );
 		
-		if( header.version < 2 ){
-			// Skip parts of the file header which may have been added since the first version of the .prt format
-			if( header.headerLength != sizeof(prt_header_v1) )
-				m_fin.seekg(header.headerLength - sizeof(prt_header_v1), std::ios::cur);
-		}else{
+		if( header.version > 1 ){
 			// Read the metadata section.
-			prt_int32 metadataCount, perMetadataSize;
-			m_fin.read( reinterpret_cast<char*>( &metadataCount ), sizeof(prt_int32) );
-			m_fin.read( reinterpret_cast<char*>( &perMetadataSize ), sizeof(prt_int32) );
+			m_fin.read( reinterpret_cast<char*>( &header.metadataCount ), sizeof(prt_int32) );
+			m_fin.read( reinterpret_cast<char*>( &header.metadataSize ), sizeof(prt_int32) );
 			
-			for( prt_int32 i = 0; i < metadataCount; ++i ){
+			for( prt_int32 i = 0; i < header.metadataCount; ++i ){
 				char name[33]; // One extra for a null character if it was missing.
 				prt_int32 type, arity;
 				
@@ -85,8 +81,8 @@ private:
 				m_fin.read( reinterpret_cast<char*>( &type ), sizeof(prt_int32) );
 				m_fin.read( reinterpret_cast<char*>( &arity ), sizeof(prt_int32) );
 
-				if( perMetadataSize != 40u )
-					m_fin.seekg(perMetadataSize - 40u, std::ios::cur);	//Skip unknown parts of the metadata definition
+				if( header.metadataSize != 40u )
+					m_fin.seekg(header.metadataSize - 40u, std::ios::cur);	//Skip unknown parts of the metadata definition
 				
 				name[32] = '\0';
 				
@@ -117,6 +113,10 @@ private:
 			// Skip parts of the file header which may have been added since the second version of the .prt format
 			if( header.headerLength != headerEnd - headerStart )
 				m_fin.seekg(header.headerLength - headerEnd + headerStart, std::ios::cur);
+		}else{
+			// Skip parts of the file header which may have been added since the first version of the .prt format
+			if( header.headerLength != sizeof(prt_header_v1) )
+				m_fin.seekg(header.headerLength - sizeof(prt_header_v1), std::ios::cur);
 		}
 
 		prt_int32 attrLength;
@@ -126,13 +126,26 @@ private:
 			throw std::runtime_error( "The reserved int value is not set to 4." );
 
 		prt_int32 channelCount, perChannelLength;
-		m_fin.read(reinterpret_cast<char*>(&channelCount), 4);
-		m_fin.read(reinterpret_cast<char*>(&perChannelLength), 4);
-
+		m_fin.read(reinterpret_cast<char*>(&channelCount), 4u);
+		m_fin.read(reinterpret_cast<char*>(&perChannelLength), 4u);
+		
+		prt_int32 expectedChannelLength = sizeof(prt_channel_header_v1);
+		if( header.version > 1 )
+			exectedChannelLength = sizeof(prt_channel_header_v2);
+			
+		if( perChannelLength < exectedChannelLength )
+			throw std::runtime_error( std::string() + "The per-channel length specified in the input stream \"" + m_filePath + "\" is not valid." );
+		
 		for(int i = 0; i < channelCount; ++i){
-			prt_channel_header_v1 channel;
+			prt_channel_header_v2 channel;
+			memset( &channel, 0, sizeof(prt_channel_header_v2) );
 			m_fin.read(reinterpret_cast<char*>(&channel), sizeof(prt_channel_header_v1));
-
+			
+			channel.channelTransformType = channel_transformation::unspecified;
+			
+			if( header.version > 1 )
+				m_fin.read( reinterpret_cast<char*>(&channel.channelTransformType), 4u );
+			
 			// Make sure the channel name is null terminated
 			channel.channelName[31] = '\0';
 
@@ -144,15 +157,19 @@ private:
 
 			if( channel.channelOffset < 0 )
 				throw std::runtime_error( std::string() + "The offset specified in channel \"" + channel.channelName + "\" in the input stream \"" + m_filePath + "\" is not valid." );
-
+			
+			if( channel.channelTransformType < 0 || channel.channelTransformType >= channel_transformation::invalid )
+				throw std::runtime_error( std::string() + "The transformation type specified in channel \"" + channel.channelName + "\" in the input stream \"" + m_filePath + "\" is not valid." );
+			
 			m_layout.add_channel(
 				std::string( channel.channelName ),
 				static_cast<data_types::enum_t>( channel.channelType ),
 				static_cast<std::size_t>( channel.channelArity ),
-				static_cast<std::size_t>( channel.channelOffset )
+				static_cast<std::size_t>( channel.channelOffset ),
+				static_cast<channel_transformation::option>( channel.channelTransformType )
 			);
 
-			if( perChannelLength != sizeof(prt_channel_header_v1) )
+			if( perChannelLength > exectedChannelLength )
 				m_fin.seekg(perChannelLength - sizeof(prt_channel_header_v1), std::ios::cur);	//Skip unknown parts of the channel header
 		}
 	}

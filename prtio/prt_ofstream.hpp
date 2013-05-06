@@ -47,7 +47,13 @@ class prt_ofstream : public prt_ostream{
 	float m_bounds[6]; // {minx, miny, miz, maxx, maxy, maxz}
 	
 private:
-	void write_metadata( std::ostream& ostream ){
+	/**
+	 * This function writes the uncompressed PRT file header, and records the file pointer position in order to later write the number of particles
+	 * for the file. It expects 'm_layout' to not change afterwards, or else you are a bad human/android/robot.
+	 */
+	void write_header(){
+		using namespace detail;
+		
 		std::map< std::string, detail::any >::iterator itBounds = m_metadata.lower_bound( "BoundBox" );
 		
 		if( itBounds == m_metadata.end() || itBounds->first != "BoundBox" )
@@ -55,12 +61,22 @@ private:
 		
 		// We don't allow users to specift a boundbox because that opens the door for bounds that are in-accurate. We clear/init the box data here.
 		itBounds->second.set( std::vector<float>(6, std::numeric_limits<float>::quiet_NaN()) );
-
-		data_types::int32_t numValues = static_cast<data_types::int32_t>( m_metadata.size() );
-		data_types::int32_t perMetadataSize = 40;
 		
-		ostream.write( reinterpret_cast<const char*>( &numValues ), 4 );
-		ostream.write( reinterpret_cast<const char*>( &perMetadataSize ), 4 );
+		m_headerLocation = m_fout.tellp();
+
+		// Write the main header data
+		prt_header_v2 header;
+		memset( &header, 0, sizeof(prt_header_v2) );
+
+		header.magicNumber = prt_magic_number();
+		header.headerLength = -1; // Will be 56 + 8 + (total of metadata sections)
+		strncpy(header.fmtIdentStr, prt_signature_string(), 32);
+		header.version = 2;
+		header.particleCount = -1;
+		header.metadataCount = static_cast<data_types::int32_t>( m_metadata.size() );
+		header.metadataSize = 40;
+
+		m_fout.write(reinterpret_cast<const char*>(&header), sizeof(prt_header_v2));
 		
 		for( std::map< std::string, detail::any >::const_iterator it = m_metadata.begin(), itEnd = m_metadata.end(); it != itEnd; ++it ){
 			char name[32];
@@ -78,30 +94,6 @@ private:
 			
 			detail::write_any( it->second, ostream );
 		}
-	}
-
-	/**
-	 * This function writes the uncompressed PRT file header, and records the file pointer position in order to later write the number of particles
-	 * for the file. It expects 'm_layout' to not change afterwards, or else you are a bad human/android/robot.
-	 */
-	void write_header(){
-		using namespace detail;
-		
-		m_headerLocation = m_fout.tellp();
-
-		// Write the main header data
-		prt_header_v1 header;
-		memset( &header, 0, sizeof(prt_header_v1) );
-
-		header.magicNumber = prt_magic_number();
-		header.headerLength = -1; // Will be 56 + 8 + (total of metadata sections)
-		strncpy(header.fmtIdentStr, prt_signature_string(), 32);
-		header.version = 2;
-		header.particleCount = -1;
-
-		m_fout.write(reinterpret_cast<const char*>(&header), sizeof(prt_header_v1));
-		
-		this->write_metadata( m_fout );
 		
 		m_headerLength = static_cast<detail::prt_int32>( m_fout.tellp() );
 		
@@ -110,16 +102,16 @@ private:
 		m_fout.write(reinterpret_cast<const char*>(&reservedInt), 4);
 
 		// Write the channel map
-		prt_channel_header_v1 prtChannel;
+		prt_channel_header_v2 prtChannel;
 
 		prt_int32 channelCount = static_cast<prt_int32>( m_layout.num_channels() );
-		prt_int32 channelHeaderItemSize = sizeof(prt_channel_header_v1);
+		prt_int32 channelHeaderItemSize = sizeof(prt_channel_header_v2);
 
 		m_fout.write(reinterpret_cast<const char*>(&channelCount), 4);
 		m_fout.write(reinterpret_cast<const char*>(&channelHeaderItemSize), 4);
 
 		for( int i = 0; i < channelCount; ++i ) {
-			memset( &prtChannel, 0, sizeof(prt_channel_header_v1) );
+			memset( &prtChannel, 0, sizeof(prt_channel_header_v2) );
 
 			std::string chName = m_layout.get_channel_name( static_cast<std::size_t>(i) );
 
@@ -129,8 +121,9 @@ private:
 			prtChannel.channelArity = (prt_int32)ch.arity;
 			prtChannel.channelType = (prt_int32)ch.type;
 			prtChannel.channelOffset = (prt_int32)ch.offset;
+			prtChannel.channelTransformType = (prt_int32)ch.xformType;
 
-			m_fout.write(reinterpret_cast<const char*>(&prtChannel), sizeof(prt_channel_header_v1));
+			m_fout.write(reinterpret_cast<const char*>(&prtChannel), sizeof(prt_channel_header_v2));
 		}
 	}
 

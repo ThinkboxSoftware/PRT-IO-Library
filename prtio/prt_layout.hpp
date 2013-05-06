@@ -19,6 +19,7 @@
 #pragma once
 
 #include <prtio/detail/data_types.hpp>
+#include <prtio/prt_transforms.hpp>
 
 #include <exception>
 #include <locale>
@@ -37,6 +38,7 @@ namespace detail{
 	struct prt_channel{
 		std::size_t offset, arity;
 		data_types::enum_t type;
+		channel_transformation::option xformType;
 	};
 	
 	//Valid names match the regular exrpession [a-zA-Z_][0-9a-zA-Z_]*
@@ -86,20 +88,31 @@ public:
 	 * @param type The data type of the channel
 	 * @param arity The number of grouped elements used by this channel. A 3D vector [x,y,z] has arity 3.
 	 * @param offset The channel;'s offset in bytes from the beginning of the particle.
+	 * @param xformType The transformation to apply to this channel when transforming the data in 3D space (ie. How scale, rotation, translation, etc. affect this data).
 	 */
-	void add_channel( const std::string& name, data_types::enum_t type, std::size_t arity, std::size_t offset ){
+	void add_channel( const std::string& name, data_types::enum_t type, std::size_t arity, std::size_t offset, channel_transformation::option xformType = channel_transformation::unspecified ){
 		if( !detail::is_valid_name( name ) )
 			throw std::runtime_error( "Invalid channel name \"" + name + "\"" );
 		
 		std::map<std::string, detail::prt_channel>::iterator it = m_channelMap.find( name );
 		if( it != m_channelMap.end() )
 			throw std::runtime_error( "Duplicate channel \"" + name + "\" detected" );
-
+		
+		if( xformType == channel_transformation::unspecified ){
+			if( name == _T("Position") )
+				xformType = channel_transformation::point;
+			//... TODO: Add more defaults.
+		}
+		
+		if( !channel_transformation::is_compatible(xformType, type, arity) )
+			throw std::runtime_error( "Incompatible transformation for channel \"" + name + "\" detected" );
+			
 		detail::prt_channel& dest = m_channelMap[ name ];
 
 		dest.type = type;
 		dest.arity = arity;
 		dest.offset = offset;
+		dest.xformType = xformType;
 
 		m_channels.push_back( name );
 

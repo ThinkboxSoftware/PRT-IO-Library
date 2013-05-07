@@ -133,7 +133,7 @@ public:
 	 * @param destType An optional override on the type of data, for storing the stream data as a different type. Ex. Convert float to half on disk.
 	 */
 	template <typename T>
-	void bind( const std::string& name, T src[], std::size_t arity, data_types::enum_t destType = data_types::traits<T>::data_type() ){
+	void bind( const std::string& name, T src[], std::size_t arity, data_types::enum_t destType = data_types::traits<T>::data_type(), channel_transformation::option xformType = channel_transformation::unspecified ){
 		if( m_layout.has_channel( name ) )
 			throw std::logic_error( "Channel \"" + name + "\" is already bound" );
 
@@ -148,7 +148,7 @@ public:
 
 		std::size_t destOffset = m_layout.size();
 
-		m_layout.add_channel( name, destType, arity, destOffset );
+		m_layout.add_channel( name, destType, arity, destOffset, xformType );
 
 		bound_channel result;
 		result.src = src;

@@ -92,6 +92,11 @@ void example_reading( const std::string& filePath ){
 		std::cout << "\tAuthor = " << *pAuthor << std::endl;
 	if( const unicode_string* pAuthor2 = stream.get_metadata_string( "Author_2" ) )
 		std::cout << "\tAuthor_2 = " << *pAuthor2 << std::endl;
+		
+	for( std::size_t i = 0, iEnd = stream.layout().num_channels(); i < iEnd; ++i ){
+		const prtio::detail::prt_channel& ch = stream.layout().get_channel( stream.layout().get_channel_name(i) );
+		std::cout << "Channel: \"" << stream.layout().get_channel_name(i) << "\" has transform type: " << prtio::channel_transformation::to_string( ch.xformType ) << std::endl;
+	}
 	
 	//We demand a "Position" channel exist, otherwise it throws an exception.
 	stream.bind( "Position", theParticle.pos, 3 );
@@ -123,7 +128,7 @@ void example_reading( const std::string& filePath ){
 void example_writing( const std::string& filePath ){
 	struct{
 		float pos[3];
-		float col[3];
+		float vel[3];
 		double density;
 		unsigned short id;
 	} theParticle;
@@ -146,7 +151,7 @@ void example_writing( const std::string& filePath ){
 	//stream.add_metadata( "A\x97thor", author );
 	
 	stream.bind( "Position", theParticle.pos, 3 );
-	stream.bind( "Color", theParticle.col, 3, prtio::data_types::type_float16 ); //Convert it to half on the fly.
+	stream.bind( "Velocity", theParticle.vel, 3, prtio::data_types::type_float16, prtio::channel_transformation::vector ); //Convert it to half on the fly.
 	stream.bind( "Density", &theParticle.density, 1 );
 	stream.bind( "ID", &theParticle.id, 1 );
 
@@ -157,9 +162,9 @@ void example_writing( const std::string& filePath ){
 		theParticle.pos[1] = 100.f * ((float)std::rand() / (float)RAND_MAX);
 		theParticle.pos[2] = 100.f * ((float)std::rand() / (float)RAND_MAX);
 
-		theParticle.col[0] = (float)(i % 23) / 22.f;
-		theParticle.col[1] = (float)((i + 43) % 7) / 6.f;
-		theParticle.col[2] = (float)((i + 7) % 91) / 90.f;
+		theParticle.vel[0] = (float)(i % 23) / 22.f;
+		theParticle.vel[1] = (float)((i + 43) % 7) / 6.f;
+		theParticle.vel[2] = (float)((i + 7) % 91) / 90.f;
 
 		theParticle.density = (double)std::rand() / (double)RAND_MAX + 0.5;
 		theParticle.id = (unsigned short)i;

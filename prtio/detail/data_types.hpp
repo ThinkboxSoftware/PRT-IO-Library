@@ -106,8 +106,6 @@ namespace data_types{
 		"uint16", "uint32", "uint64",
 		"int8", "uint8"
 	};
-
-	inline bool is_float( enum_t dt ){ return type_float16 >= dt && type_float64 <= dt; }
 	
 	/**
 	 * The traits template class and it specializations exist to provide compile time information about a mapping

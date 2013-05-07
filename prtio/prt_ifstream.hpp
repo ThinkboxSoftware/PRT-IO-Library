@@ -71,7 +71,7 @@ private:
 		if( header.version > 1 ){
 			// Read the metadata section.
 			m_fin.read( reinterpret_cast<char*>( &header.metadataCount ), sizeof(prt_int32) );
-			m_fin.read( reinterpret_cast<char*>( &header.metadataSize ), sizeof(prt_int32) );
+			m_fin.read( reinterpret_cast<char*>( &header.metadataLength ), sizeof(prt_int32) );
 			
 			for( prt_int32 i = 0; i < header.metadataCount; ++i ){
 				char name[33]; // One extra for a null character if it was missing.
@@ -81,8 +81,8 @@ private:
 				m_fin.read( reinterpret_cast<char*>( &type ), sizeof(prt_int32) );
 				m_fin.read( reinterpret_cast<char*>( &arity ), sizeof(prt_int32) );
 
-				if( header.metadataSize != 40u )
-					m_fin.seekg(header.metadataSize - 40u, std::ios::cur);	//Skip unknown parts of the metadata definition
+				if( header.metadataLength != 40u )
+					m_fin.seekg(header.metadataLength - 40u, std::ios::cur);	//Skip unknown parts of the metadata definition
 				
 				name[32] = '\0';
 				
@@ -131,9 +131,9 @@ private:
 		
 		prt_int32 expectedChannelLength = sizeof(prt_channel_header_v1);
 		if( header.version > 1 )
-			exectedChannelLength = sizeof(prt_channel_header_v2);
+			expectedChannelLength = sizeof(prt_channel_header_v2);
 			
-		if( perChannelLength < exectedChannelLength )
+		if( perChannelLength < expectedChannelLength )
 			throw std::runtime_error( std::string() + "The per-channel length specified in the input stream \"" + m_filePath + "\" is not valid." );
 		
 		for(int i = 0; i < channelCount; ++i){
@@ -169,8 +169,8 @@ private:
 				static_cast<channel_transformation::option>( channel.channelTransformType )
 			);
 
-			if( perChannelLength > exectedChannelLength )
-				m_fin.seekg(perChannelLength - sizeof(prt_channel_header_v1), std::ios::cur);	//Skip unknown parts of the channel header
+			if( perChannelLength > expectedChannelLength )
+				m_fin.seekg(perChannelLength - expectedChannelLength, std::ios::cur);	//Skip unknown parts of the channel header
 		}
 	}
 

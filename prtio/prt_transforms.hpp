@@ -18,6 +18,7 @@
 #pragma once
 
 #include <prtio/detail/data_types.hpp>
+#include <prtio/detail/conversion.hpp>
 
 namespace prtio{
 
@@ -47,12 +48,12 @@ namespace channel_transformation{
 		case point:
 		case vector:
 		case normal:
-			return data_types::is_float(type) && arity == 3u; 
+			return detail::is_float(type) && arity == 3u; 
 		case orientation:
 		case rotation:
-			return data_types::is_float(type) && arity == 4u;
+			return detail::is_float(type) && arity == 4u;
 		case scalar:
-			return data_types::is_float(type) && arity == 1u;
+			return detail::is_float(type) && arity == 1u;
 		default:
 			return true;
 		}

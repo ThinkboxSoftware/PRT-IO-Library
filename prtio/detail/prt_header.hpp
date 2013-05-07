@@ -63,6 +63,13 @@ namespace detail{
 		
 		prt_int32 channelTransformType;
 	};
+	
+	//This is the layout of a PRT file's per-metadata header
+	struct prt_metadata_header_v2 {
+		char      metadataName[32];
+		prt_int32 metadataType;
+		prt_int32 metadataArity;
+	};
 
 	//Returns the 8 byte magic number that indicates this file format
 	prt_int64 prt_magic_number(){

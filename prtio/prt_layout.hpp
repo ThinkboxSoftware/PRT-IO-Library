@@ -99,7 +99,7 @@ public:
 			throw std::runtime_error( "Duplicate channel \"" + name + "\" detected" );
 		
 		if( xformType == channel_transformation::unspecified ){
-			if( name == _T("Position") )
+			if( name == "Position" )
 				xformType = channel_transformation::point;
 			//... TODO: Add more defaults.
 		}

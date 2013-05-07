@@ -74,7 +74,7 @@ private:
 		header.version = 2;
 		header.particleCount = -1;
 		header.metadataCount = static_cast<data_types::int32_t>( m_metadata.size() );
-		header.metadataSize = 40;
+		header.metadataLength = static_cast<data_types::int32_t>( sizeof(prt_metadata_header_v2) );
 
 		m_fout.write(reinterpret_cast<const char*>(&header), sizeof(prt_header_v2));
 		
@@ -87,12 +87,12 @@ private:
 			
 			name[31] = '\0';
 			
-			ostream.write( name, 32 );
+			m_fout.write( name, 32 );
 
 			if( it == itBounds )
 				m_boundsLocation = m_fout.tellp();
 			
-			detail::write_any( it->second, ostream );
+			detail::write_any( it->second, m_fout );
 		}
 		
 		m_headerLength = static_cast<detail::prt_int32>( m_fout.tellp() );

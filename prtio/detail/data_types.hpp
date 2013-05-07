@@ -31,7 +31,7 @@
 #include <cctype>
 #include <string>
 
-#if defined(WIN32) || defined(_WIN64)
+#if defined(_WIN32) || defined(_WIN64)
 #if _MSC_VER >= 1600
 #define HAS_CSTDINT_TYPES
 #define STDNAMESPACE std
@@ -106,7 +106,7 @@ namespace data_types{
 		"uint16", "uint32", "uint64",
 		"int8", "uint8"
 	};
-
+	
 	/**
 	 * The traits template class and it specializations exist to provide compile time information about a mapping
 	 * from C++ types to PRT io types.
@@ -138,14 +138,14 @@ namespace data_types{
 	PRT_TRAITS_IMPL( float32_t, type_float32 );
 	PRT_TRAITS_IMPL( float64_t, type_float64 );
 
-#if defined(WIN32) || defined(_WIN64)
+#if defined(_WIN32) || defined(_WIN64)
 	//Windows treats long and int as separate types.
 	PRT_TRAITS_IMPL( long, type_int32 );
 	PRT_TRAITS_IMPL( unsigned long, type_uint32 );
 #endif
 
 #undef PRT_TRAITS_IMPL
-
+	
 	/**
 	 * Extracts a data_type::enum_t from a string representation.
 	 */

@@ -23,7 +23,7 @@
 #include <prtio/prt_ifstream.hpp>
 #include <prtio/prt_ofstream.hpp>
 
-#if !defined(__APPLE__) && !defined(WIN32) && !defined(_WIN64) && __WORDSIZE == 64
+#if !defined(__APPLE__) && !defined(_WIN32) && !defined(_WIN64) && __WORDSIZE == 64
 #define INT64 long int
 #else
 #define INT64 long long

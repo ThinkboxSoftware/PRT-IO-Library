@@ -35,6 +35,17 @@ namespace detail{
 		prt_int32 version;
 		prt_int64 particleCount;
 	};
+	
+	struct prt_header_v2 {
+		prt_int64 magicNumber;
+		prt_int32 headerLength;
+		char      fmtIdentStr[32];
+		prt_int32 version;
+		prt_int64 particleCount;
+		
+		prt_int32 metadataCount;
+		prt_int32 metadataLength;
+	};
 
 	//This is the layout of a PRT file's per-channel header
 	struct prt_channel_header_v1 {
@@ -42,6 +53,22 @@ namespace detail{
 		prt_int32 channelType;
 		prt_int32 channelArity;
 		prt_int32 channelOffset;
+	};
+	
+	struct prt_channel_header_v2 {
+		char      channelName[32];
+		prt_int32 channelType;
+		prt_int32 channelArity;
+		prt_int32 channelOffset;
+		
+		prt_int32 channelTransformType;
+	};
+	
+	//This is the layout of a PRT file's per-metadata header
+	struct prt_metadata_header_v2 {
+		char      metadataName[32];
+		prt_int32 metadataType;
+		prt_int32 metadataArity;
 	};
 
 	//Returns the 8 byte magic number that indicates this file format

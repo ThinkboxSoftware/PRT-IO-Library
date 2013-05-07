@@ -20,6 +20,7 @@
 
 #include <prtio/detail/conversion.hpp>
 #include <prtio/detail/data_types.hpp>
+#include <prtio/detail/any.hpp>
 #include <prtio/prt_layout.hpp>
 
 #include <cstring>
@@ -46,11 +47,14 @@ class prt_istream{
 
 	//A list of all channels that we want to extract
 	std::vector< bound_channel > m_boundChannels;
-
+	
 protected:
 	//The layout of the particle data from the source (ex. PRT file).
 	prt_layout m_layout;
 
+	// The metadata associated with the prt stream.
+	std::map< std::string, detail::any > m_metadata;
+	
 	/**
 	 * This abstract function provides the interface for subclasses to produce particle data.
 	 * When prt_istream::read_next_particle() is called, it uses read_impl() to get the next
@@ -85,6 +89,46 @@ public:
 	 */
 	bool has_channel( const std::string& name ) const {
 		return m_layout.has_channel( name );
+	}
+	
+#ifdef _WIN32
+	/**
+	 * Acquires a pointer to a metadata item with a string value.
+	 * \param name The name of the metadata item to search for.
+	 * \return A pointer to a UTF-16 encoded string value for the named metadata, or NULL if there was no such item.
+	 */
+	const std::wstring* get_metadata_string( const std::string& name ) const {
+		std::map< std::string, detail::any >::const_iterator it = m_metadata.find( name );
+		if( it != m_metadata.end() )
+			return it->second.get_ptr<std::wstring>();
+		return NULL;
+	}
+#else
+	/**
+	 * Acquires a pointer to a metadata item with a string value.
+	 * \param name The name of the metadata item to search for.
+	 * \return A pointer to a UTF-8 encoded string value for the named metadata, or NULL if there was no such item.
+	 */
+	const std::string* get_metadata_string( const std::string& name ) const {
+		std::map< std::string, detail::any >::const_iterator it = m_metadata.find( name );
+		if( it != m_metadata.end() )
+			return it->second.get_ptr<std::string>();
+		return NULL;
+	}
+#endif
+	
+	/**
+	 * Acquires a pointer to a metadata item with a numeric value.
+	 * \tparam T The numeric type of the stored value.
+	 * \param name The name of the metadata item to search for.
+	 * \return A pointer to a std::vector<T> of the numeric values stored for the metadata item, or NULL if no such named metadata exists.
+	 */
+	template <class T>
+	const std::vector<T>* get_metadata_ptr( const std::string& name ) const {
+		std::map< std::string, detail::any >::const_iterator it = m_metadata.find( name );
+		if( it != m_metadata.end() )
+			return it->second.get_ptr< std::vector<T> >();
+		return NULL;
 	}
 
 	/**

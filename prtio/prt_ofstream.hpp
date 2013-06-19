@@ -21,8 +21,9 @@
 
 #include <prtio/prt_ostream.hpp>
 #include <prtio/detail/prt_header.hpp>
-#include <fstream>
 #include <cassert>
+#include <fstream>
+#include <limits>
 #include <zlib.h>
 
 #ifdef _WIN32
@@ -87,7 +88,7 @@ private:
 			
 			m_fout.write( &convertedString.front(), convertedString.size() );
 #else
-			m_fout.write( pString, std::char_traits<char>::length( pString ) );
+			m_fout.write( pString, std::char_traits<char>::length( pString ) + 1 );
 #endif
 		}else{
 			m_fout.write( static_cast<const char*>( value.get_void_ptr() ), value.get_arity() * data_types::sizes[ value.get_type() ] );

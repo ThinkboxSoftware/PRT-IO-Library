@@ -24,6 +24,11 @@
 #include <fstream>
 #include <zlib.h>
 
+#ifdef _WIN32
+#define NOMINMAX
+#include <Windows.h>
+#endif
+
 namespace prtio{
 
 /**
@@ -40,6 +45,78 @@ class prt_ifstream : public prt_istream{
 	detail::prt_int64 m_particleCount; //The number of particles remaining in the file.
 
 private:
+	void read_meta_chunk( detail::prt_int32 chunkLength ){
+		char channelName[32];
+		char valueName[32];
+		detail::prt_int32 valueType;
+		
+		m_fin.getline( channelName, 32, '\0' );
+		chunkLength -= m_fin.gcount();
+		
+		m_fin.getline( valueName, 32, '\0' );
+		chunkLength -= m_fin.gcount();
+		
+		m_fin.read( reinterpret_cast<char*>( &valueType ), 4u );
+		chunkLength -= 4;
+		
+		assert( chunkLength > 0 );
+		
+		if( valueType < meta_types::type_string || valueType >= meta_types::type_last )
+			throw std::runtime_error( std::string() + "The data type specified for channel \"" + channelName + "\" metadata \"" + valueName + "\" in the input stream \"" + m_filePath + "\" is not valid." );
+		
+		struct scoped_void_ptr{
+			void* ptr;
+			~scoped_void_ptr(){
+				operator delete( ptr );
+			}
+		} buffer = { operator new( chunkLength ) };
+		
+		// We've been subtracting the read bytes as we go, so this is the remaining number of bytes in the chunk.
+		m_fin.read( static_cast<char*>( buffer.ptr ), chunkLength );
+		
+		if( channelName[0] != '\0' && !detail::is_valid_channel_name( channelName ) ){
+			std::cerr << "Invalid channel name: \"" << channelName << "\" in metadata: \"" << valueName << "\"" << std::endl;
+			return;
+		}
+		
+		if( !detail::is_valid_channel_name( valueName ) ){
+			std::cerr << "Invalid metadata name: \"" << valueName << "\" in channel: \"" << channelName << "\"" << std::endl;
+			return;
+		}
+		
+		std::map< std::string, prt_meta_value >& metaValue = (channelName[0] == '\0') ? m_fileMetadata : m_channelMetadata[ std::string(channelName) ];
+		
+		if( valueType == meta_types::type_string ){
+#ifdef _WIN32
+			int wcharLength = MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, static_cast<const char*>( buffer.ptr ), chunkLength, NULL, 0 );
+			if( wcharLength <= 0 ){
+				std::cerr << "Invalid string data in metadata: \"" << valueName << "\" in channel: \"" << channelName << "\"" << std::endl;
+				return;
+			}
+
+			// In Windows we convert from UTF8 to UTF16LE in memory.
+			std::vector<wchar_t> convertedString( wcharLength, L'\0' );
+			
+			int r = MultiByteToWideChar( CP_UTF8, MB_ERR_INVALID_CHARS, static_cast<const char*>( buffer.ptr ), chunkLength, &convertedString.front(), wcharLength );
+			
+			assert( r > 0 );
+			
+			metaValue[ std::string(valueName) ].set_string( &convertedString.front(), static_cast<std::size_t>( chunkLength - 1 ) );
+#else
+			// In non-Windows we can work directly with UTF8.
+			metaValue[ std::string(valueName) ].set_string( static_cast<char*>( buffer.ptr ), static_cast<std::size_t> ( chunkLength - 1 ) );
+#endif
+		}else{
+			std::size_t basicSize = data_types::sizes[valueType]; // We've already verified that we have a valid index.
+			
+			assert( chunkLength >= basicSize && (chunkLength % basicSize) == 0 );
+			
+			std::size_t arity = chunkLength / basicSize;
+			
+			metaValue[ std::string(valueName) ].set( static_cast<meta_types::option>( valueType ), arity, buffer.ptr );
+		}
+	}
+
 	/**
 	 * This function reads the uncompressed header portion of the PRT file and leaves the read pointer
 	 * of 'm_fin' at the beginning of the compressed particle data portion of the file. It will populate
@@ -49,7 +126,13 @@ private:
 		using namespace detail;
 
 		prt_header_v1 header;
-		m_fin.read(reinterpret_cast<char*>(&header), sizeof(prt_header_v1));
+		
+		//m_fin.read(reinterpret_cast<char*>(&header), sizeof(prt_header_v1));
+		m_fin.read( reinterpret_cast<char*>(&header.magicNumber), 8 );
+		m_fin.read( reinterpret_cast<char*>(&header.headerLength), 4 );
+		m_fin.read( header.fmtIdentStr, 32 );
+		m_fin.read( reinterpret_cast<char*>(&header.version), 4 );
+		m_fin.read( reinterpret_cast<char*>(&header.particleCount), 8 );
 
 		//This is not a prt file (as opposed to a corrupt prt file);
 		if( header.magicNumber != prt_magic_number() )
@@ -63,9 +146,29 @@ private:
 		if( header.particleCount < 0 )
 			throw std::runtime_error( "The input stream \"" + m_filePath + "\" was not closed correctly and reported negative particles within." );
 
-		// Skip parts of the file header which may have been added since the first version of the .prt format
-		if( header.headerLength != sizeof(prt_header_v1) )
-			m_fin.seekg(header.headerLength - sizeof(prt_header_v1), std::ios::cur);
+		if( header.version <= 1 ){
+			// Skip parts of the file header which may have been added since the first version of the .prt format
+			if( header.headerLength != sizeof(prt_header_v1) )
+				m_fin.seekg(header.headerLength - sizeof(prt_header_v1), std::ios::cur);
+		}else{
+			detail::prt_int32 chunkType;
+			detail::prt_int32 chunkLength;
+			
+			m_fin.read( reinterpret_cast<char*>( &chunkType ), 4 );
+			m_fin.read( reinterpret_cast<char*>( &chunkLength ), 4 );
+			
+			while( chunkType != detail::prt_stop_chunk() ){
+				if( chunkType == detail::prt_meta_chunk() ){
+					this->read_meta_chunk( chunkLength );
+				}else{
+					// Skip this unknown chunk.
+					m_fin.seekg( chunkLength, std::ios::cur );
+				}
+
+				m_fin.read( reinterpret_cast<char*>( &chunkType ), 4 );
+				m_fin.read( reinterpret_cast<char*>( &chunkLength ), 4 );
+			}
+		}
 
 		prt_int32 attrLength;
 		m_fin.read(reinterpret_cast<char*>(&attrLength), 4);
@@ -83,7 +186,10 @@ private:
 
 			// Make sure the channel name is null terminated
 			channel.channelName[31] = '\0';
-
+			
+			if( !detail::is_valid_channel_name( channel.channelName ) )
+				std::cerr << "Invalid channel name: \"" << channel.channelName << "\"" << std::endl;
+			
 			if( channel.channelType < 0 || channel.channelType >= data_types::type_count )
 				throw std::runtime_error( std::string() + "The data type specified in channel \"" + channel.channelName + "\" in the input stream \"" + m_filePath + "\" is not valid." );
 
@@ -99,9 +205,22 @@ private:
 				static_cast<std::size_t>( channel.channelArity ),
 				static_cast<std::size_t>( channel.channelOffset )
 			);
+			
+			// Force metadata creation for this channel if there weren't any values stored in the file.
+			m_channelMetadata[ channel.channelName ];
 
 			if( perChannelLength != sizeof(prt_channel_header_v1) )
 				m_fin.seekg(perChannelLength - sizeof(prt_channel_header_v1), std::ios::cur);	//Skip unknown parts of the channel header
+		}
+		
+		// Remove metadata for channels that don't actually exist.
+		for( std::map< std::string, std::map< std::string, prt_meta_value > >::iterator it = m_channelMetadata.begin(), itEnd = m_channelMetadata.end(); it != itEnd; /*Do Nothing*/ ){
+			if( !m_layout.has_channel( it->first ) ){
+				std::cerr << "Invalid metadata channel: \"" << it->first << "\"" << std::endl;
+				m_channelMetadata.erase( it++ );
+			}else{
+				++it;
+			}
 		}
 	}
 

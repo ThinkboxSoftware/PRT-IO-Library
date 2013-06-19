@@ -45,14 +45,38 @@ namespace detail{
 	};
 
 	//Returns the 8 byte magic number that indicates this file format
-	prt_int64 prt_magic_number(){
+	inline prt_int64 prt_magic_number(){
 		static const unsigned char magic[] = {192, 'P', 'R', 'T', '\r', '\n', 26, '\n'};
 		return *(prt_int64*)magic;
 	}
 
 	//Returns the human readable signature string to embed in the file
-	const char* prt_signature_string(){
+	inline const char* prt_signature_string(){
 		return "Extensible Particle Format";
+	}
+	
+	inline prt_int32 prt_meta_chunk(){
+		static const char magic[] = {'M', 'e', 't', 'a'};
+		return *reinterpret_cast<const prt_int32*>( magic );
+	}
+	
+	inline prt_int32 prt_stop_chunk(){
+		static const char magic[] = {'S', 't', 'o', 'p'};
+		return *reinterpret_cast<const prt_int32*>( magic );
+	}
+	
+	inline bool is_valid_channel_name( const char* name ){
+		if( !std::isalpha(*name) && *name != '_' )
+			return false;
+		
+		std::size_t length = 1;
+		
+		while( *++name != '\0' ){
+			if( ++length >= 32 || (!std::isalnum(*name) && *name == '_') )
+				return false;
+		}
+		
+		return true;
 	}
 }//namespace detail
 

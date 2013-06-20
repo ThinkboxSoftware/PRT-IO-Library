@@ -21,8 +21,15 @@
 
 #include <prtio/prt_ostream.hpp>
 #include <prtio/detail/prt_header.hpp>
+#include <cassert>
 #include <fstream>
+#include <limits>
 #include <zlib.h>
+
+#ifdef _WIN32
+#define NOMINMAX
+#include <Windows.h>
+#endif
 
 namespace prtio{
 
@@ -40,8 +47,97 @@ class prt_ofstream : public prt_ostream{
 	detail::prt_int64 m_particleCount; //The number of particles written so far.
 
 	std::ostream::streampos m_countLocation; //The location that we need to write the final particle count to.
-
+	std::ostream::streampos m_boundBoxLocation; //The location that we need to write the final boundbox to.
+	
+	float m_bounds[6];
+	std::ptrdiff_t m_posChannelOffset;
+	
 private:
+	static std::size_t get_value_size( const prt_meta_value& value ){
+		if( value.get_type() == meta_types::type_string ){
+#ifdef _WIN32
+			// Convert to UTF8 before measuring
+			int result = WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, value.get_string(), -1, NULL, 0, NULL, NULL );
+			if( result <= 0 ) // If there was an error, return 1 so we can make an empty string.
+				return 1u;
+			return static_cast<std::size_t>( result );
+#else
+			return std::char_traits<char>::length( value.get_string() ) + 1;
+#endif
+		}else{
+			return value.get_arity() * data_types::sizes[ value.get_type() ];
+		}
+	}
+	
+	void write_value( const prt_meta_value& value ){
+		if( value.get_type() == meta_types::type_string ){
+			const uchar_type* pString = value.get_string();
+		
+#ifdef _WIN32
+			std::vector<char> convertedString;
+
+			// Convert to UTF8 before measuring
+			int result = WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, pString, -1, NULL, 0, NULL, NULL );
+			if( result <= 0 ){
+				convertedString.push_back( '\0' );
+			}else{
+				convertedString.assign( static_cast<std::size_t>( result ), '\0' );
+				
+				result = WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, pString, -1, &convertedString.front(), result, NULL, NULL );
+			}
+			
+			m_fout.write( &convertedString.front(), convertedString.size() );
+#else
+			m_fout.write( pString, std::char_traits<char>::length( pString ) + 1 );
+#endif
+		}else{
+			m_fout.write( static_cast<const char*>( value.get_void_ptr() ), value.get_arity() * data_types::sizes[ value.get_type() ] );
+		}
+	}
+	
+	static std::size_t measure_meta_chunk( const std::string& channelName, const std::string& valueName, const prt_meta_value& value ){
+		return channelName.size() + 1 + valueName.size() + 1 + 4 + get_value_size( value );
+	}
+	
+	/**
+	 * Writes a meta chunk to the stream.
+	 * @return The stream location of the value in case it needs to be re-written later.
+	 */
+	std::ostream::streampos write_meta_chunk( const std::string& channelName, const std::string& valueName, const prt_meta_value& value ){
+		if( !detail::is_valid_channel_name( valueName.c_str() ) )
+			throw std::runtime_error( "Invalid metadata name: \"" + valueName + "\" for channel: \"" + channelName + "\" while writing file: \"" + m_filePath + "\"" );
+		
+		detail::prt_int32 chunkType = detail::prt_meta_chunk();
+		detail::prt_int32 chunkLength = measure_meta_chunk( channelName, valueName, value );
+		
+		m_fout.write( reinterpret_cast<const char*>( &chunkType ), 4 );
+		m_fout.write( reinterpret_cast<const char*>( &chunkLength ), 4 );
+		
+		detail::prt_int32 valueType = value.get_type();
+
+		m_fout.write( channelName.c_str(), channelName.size() + 1 );
+		m_fout.write( valueName.c_str(), valueName.size() + 1 );
+		m_fout.write( reinterpret_cast<const char*>( &valueType ), 4 );
+		
+		std::ostream::streampos result = m_fout.tellp();
+		
+		this->write_value( value );
+		
+		return result;
+	}
+	
+	static std::size_t measure_stop_chunk(){
+		return 0;
+	}
+	
+	void write_stop_chunk(){
+		detail::prt_int32 chunkType = detail::prt_stop_chunk();
+		detail::prt_int32 chunkLength = 0;
+		
+		m_fout.write( reinterpret_cast<const char*>( &chunkType ), 4 );
+		m_fout.write( reinterpret_cast<const char*>( &chunkLength ), 4 );
+	}
+	
 	/**
 	 * This function writes the uncompressed PRT file header, and records the file pointer position in order to later write the number of particles
 	 * for the file. It expects 'm_layout' to not change afterwards, or else you are a bad human/android/robot.
@@ -49,19 +145,62 @@ private:
 	void write_header(){
 		using namespace detail;
 
+		// Force the BoundBox metadata to exist, and also set it to empty since we haven't calculated the box yet.
+		m_fileMetadata[ "BoundBox" ].set_array( m_bounds );
+		
+		// Calculate the length of the various chunks in the header;
+		std::size_t chunksSizeTotal = 0;
+		
+		for( std::map< std::string, prt_meta_value >::const_iterator it = m_fileMetadata.begin(), itEnd = m_fileMetadata.end(); it != itEnd; ++it )
+			chunksSizeTotal += 8 + measure_meta_chunk( "", it->first, it->second );
+		
+		for( std::map< std::string, std::map< std::string, prt_meta_value > >::const_iterator it = m_channelMetadata.begin(), itEnd = m_channelMetadata.end(); it != itEnd; ++it ){
+			if( !m_layout.has_channel( it->first ) )
+				continue;
+				
+			for( std::map< std::string, prt_meta_value >::const_iterator itValue = it->second.begin(), itValueEnd = it->second.end(); itValue != itValueEnd; ++itValue )
+				chunksSizeTotal += 8 + measure_meta_chunk( it->first, itValue->first, itValue->second );
+		}
+		
+		chunksSizeTotal += 8 + measure_stop_chunk();
+		
 		// Write the main header data
 		prt_header_v1 header;
 		memset( &header, 0, sizeof(prt_header_v1) );
 
 		header.magicNumber = prt_magic_number();
-		header.headerLength = sizeof(prt_header_v1);
+		header.headerLength = sizeof(prt_header_v1) + chunksSizeTotal;
 		strncpy(header.fmtIdentStr, prt_signature_string(), 32);
-		header.version = 1;
+		header.version = 2;
 		header.particleCount = -1;
 
 		m_countLocation = ((char*)&header.particleCount - (char*)&header) + m_fout.tellp(); //This is where we need to seek to in order to write the particle count at the end.
 
-		m_fout.write(reinterpret_cast<const char*>(&header), sizeof(prt_header_v1));
+		//m_fout.write(reinterpret_cast<const char*>(&header), sizeof(prt_header_v1));
+		m_fout.write( reinterpret_cast<const char*>( &header.magicNumber ), 8 );
+		m_fout.write( reinterpret_cast<const char*>( &header.headerLength ), 4 );
+		m_fout.write( header.fmtIdentStr, 32 );
+		m_fout.write( reinterpret_cast<const char*>( &header.version ), 4 );
+		m_fout.write( reinterpret_cast<const char*>( &header.particleCount ), 8 );
+		
+		for( std::map< std::string, prt_meta_value >::const_iterator it = m_fileMetadata.begin(), itEnd = m_fileMetadata.end(); it != itEnd; ++it ){
+			std::ostream::streampos p = this->write_meta_chunk( "", it->first, it->second );
+			
+			if( it->first == "BoundBox" )
+				m_boundBoxLocation = p;
+		}
+		
+		for( std::map< std::string, std::map< std::string, prt_meta_value > >::const_iterator it = m_channelMetadata.begin(), itEnd = m_channelMetadata.end(); it != itEnd; ++it ){
+			if( !m_layout.has_channel( it->first ) )
+				continue;
+			
+			for( std::map< std::string, prt_meta_value >::const_iterator itValue = it->second.begin(), itValueEnd = it->second.end(); itValue != itValueEnd; ++itValue )
+				this->write_meta_chunk( it->first, itValue->first, itValue->second );
+		}
+		
+		this->write_stop_chunk();
+		
+		assert( m_fout.tellp() == static_cast<std::streamsize>(header.headerLength) );
 
 		// Write the reserved bytes
 		prt_int32 reservedInt = 4;
@@ -80,7 +219,10 @@ private:
 			memset( &prtChannel, 0, sizeof(prt_channel_header_v1) );
 
 			std::string chName = m_layout.get_channel_name( static_cast<std::size_t>(i) );
-
+			
+			if( !detail::is_valid_channel_name( chName.c_str() ) )
+				throw std::runtime_error( "Invalid channel name: \"" + chName + "\" while writing file: \"" + m_filePath + "\"" );
+			
 			const detail::prt_channel& ch = m_layout.get_channel( chName );
 
 			strncpy( prtChannel.channelName, chName.c_str(), 32 );
@@ -129,7 +271,12 @@ public:
 		m_bufferSize = 0;
 		m_particleCount = 0;
 		m_countLocation = 0;
+		m_boundBoxLocation = 0;
+		m_posChannelOffset = -1;
 		memset( &m_zstream, 0, sizeof(m_zstream) );
+		
+		m_bounds[0] = m_bounds[1] = m_bounds[2] = (std::numeric_limits<float>::max)();
+		m_bounds[3] = m_bounds[4] = m_bounds[5] = (std::numeric_limits<float>::min)();
 	}
 
 	/**
@@ -152,7 +299,13 @@ public:
 
 		m_filePath = file;
 		m_fout.exceptions( std::ios::badbit|std::ios::failbit ); //We want an exception if writing anything fails.
-
+		
+		if( m_layout.has_channel( "Position" ) ){
+			const detail::prt_channel& ch = m_layout.get_channel( "Position" );
+			if( ch.type == data_types::type_float32 && ch.arity == 3 )
+				m_posChannelOffset = static_cast<std::ptrdiff_t>( ch.offset );
+		}
+		
 		write_header();
 		init_zlib();
 	}
@@ -181,7 +334,11 @@ public:
 		if( m_fout.is_open() ){
 			if( m_countLocation > 0 ){
 				m_fout.seekp( m_countLocation, std::ios::beg );
-				m_fout.write( reinterpret_cast<char*>( &m_particleCount ), 8 );
+				m_fout.write( reinterpret_cast<const char*>( &m_particleCount ), 8 );
+			}
+			if( m_boundBoxLocation > 0 ){
+				m_fout.seekp( m_boundBoxLocation, std::ios::beg );
+				m_fout.write( reinterpret_cast<const char*>( m_bounds ), sizeof(float) * 6 );
 			}
 			m_fout.close();
 		}
@@ -201,7 +358,26 @@ protected:
 	 */
 	virtual void write_impl( const char* data ){
 		++m_particleCount;
-
+		
+		// If we have a valid Position channel, add this particle to bounding box we are tracking.
+		if( m_posChannelOffset >= 0 ){
+			const float* p = reinterpret_cast<const float*>( data + m_posChannelOffset );
+			if( p[0] < m_bounds[0] )
+				m_bounds[0] = p[0];
+			if( p[0] > m_bounds[3] )
+				m_bounds[3] = p[0];
+				
+			if( p[1] < m_bounds[1] )
+				m_bounds[1] = p[1];
+			if( p[1] > m_bounds[4] )
+				m_bounds[4] = p[1];
+				
+			if( p[2] < m_bounds[2] )
+				m_bounds[2] = p[2];
+			if( p[2] > m_bounds[5] )
+				m_bounds[5] = p[2];
+		}
+		
 		m_zstream.avail_in = static_cast<unsigned>( m_layout.size() );
 		m_zstream.next_in = reinterpret_cast<unsigned char*>( const_cast<char*>(data) );
 

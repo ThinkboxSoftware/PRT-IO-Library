@@ -21,6 +21,7 @@
 #include <prtio/detail/conversion.hpp>
 #include <prtio/detail/data_types.hpp>
 #include <prtio/prt_layout.hpp>
+#include <prtio/prt_meta_value.hpp>
 
 #include <exception>
 #include <string>
@@ -49,6 +50,9 @@ class prt_ostream{
 protected:
 	//The layout of the particle data from the source (ex. PRT file).
 	prt_layout m_layout;
+	
+	std::map< std::string, prt_meta_value > m_fileMetadata;
+	std::map< std::string, std::map< std::string, prt_meta_value > > m_channelMetadata;
 
 	/**
 	 * This abstract function provides the interface for subclasses to consume a single particle.
@@ -64,7 +68,26 @@ public:
 
 	virtual ~prt_ostream()
 	{}
+	
+	/**
+	 * Adds a metadata name/value pair associated with the entire file.
+	 * @param name The name associated with the metadata.
+	 * @param value The generic value associated with the metadata.
+	 */
+	void add_file_metadata( const std::string& name, const prt_meta_value& value ){
+		m_fileMetadata[ name ] = value;
+	}
 
+	/**
+	 * Adds a metadata name/value pair associated with a specific channel.
+	 * @param channelName The name of the channel to associate the metadata with.
+	 * @param name The name associated with the metadata.
+	 * @param value The generic value associated with the metadata.
+	 */
+	void add_channel_metadata( const std::string& channelName, const std::string& name, const prt_meta_value& value ){
+		m_channelMetadata[ channelName ][ name ] = value;
+	}
+	
 	/**
 	 * This template function will bind a user-supplied variable to a named channel to be written to a prt_ostream
 	 * @tparam T The type of the variable to bind to.

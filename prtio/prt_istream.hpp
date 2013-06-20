@@ -21,6 +21,7 @@
 #include <prtio/detail/conversion.hpp>
 #include <prtio/detail/data_types.hpp>
 #include <prtio/prt_layout.hpp>
+#include <prtio/prt_meta_value.hpp>
 
 #include <cstring>
 #include <exception>
@@ -46,10 +47,14 @@ class prt_istream{
 
 	//A list of all channels that we want to extract
 	std::vector< bound_channel > m_boundChannels;
-
+	
 protected:
 	//The layout of the particle data from the source (ex. PRT file).
 	prt_layout m_layout;
+	
+	// Metadata is populated here from the source
+	std::map< std::string, prt_meta_value > m_fileMetadata;
+	std::map< std::string, std::map< std::string, prt_meta_value > > m_channelMetadata;
 
 	/**
 	 * This abstract function provides the interface for subclasses to produce particle data.
@@ -77,6 +82,14 @@ public:
 	const prt_layout& layout() const {
 		return m_layout;
 	}
+	
+	/**
+	 * Retrieves the metadata associated with the whole file (ie. not channel specific).
+	 * @return The map of metadata names and values for the file.
+	 */
+	const std::map< std::string, prt_meta_value >& get_file_metadata() const {
+		return m_fileMetadata;
+	}
 
 	/**
 	 * Determines if the stream's particles have a channel with the given name
@@ -86,7 +99,19 @@ public:
 	bool has_channel( const std::string& name ) const {
 		return m_layout.has_channel( name );
 	}
-
+	
+	/**
+	 * Retrieves the metadata associated with the specified channel.
+	 * @param channel The name of the channel to retrieve the metadata for.
+	 * @return The map of metadata names and values for the channel.
+	 */
+	const std::map< std::string, prt_meta_value >& get_channel_metadata( const std::string& channel ) const {
+		std::map< std::string, std::map< std::string, prt_meta_value > >::const_iterator it = m_channelMetadata.find( channel );
+		if( it == m_channelMetadata.end() )
+			throw std::out_of_range( "There is no channel named \"" + channel + "\"" );
+		return it->second;
+	}
+	
 	/**
 	 * This template function will bind a user-supplied variable to a named channel extracted from a prt_istream
 	 * @tparam T The type of the variable to bind to.

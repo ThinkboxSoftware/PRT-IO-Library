@@ -22,19 +22,19 @@ endif()
 
 ADD_EXECUTABLE ( example ../example.cpp )
 TARGET_LINK_LIBRARIES ( example
-  ${ILMBASE_HALF_LIBRARY}
+  ${Ilmbase_HALF_LIBRARY}
   ${ZLIB_LIBRARY}
 )
 
 ADD_EXECUTABLE ( example_layout ../example_layout.cpp )
 TARGET_LINK_LIBRARIES ( example_layout
-  ${ILMBASE_HALF_LIBRARY}
+  ${Ilmbase_HALF_LIBRARY}
   ${ZLIB_LIBRARY}
 )
 
 ADD_EXECUTABLE ( example_metadata ../example_metadata.cpp )
 TARGET_LINK_LIBRARIES ( example_metadata
-  ${ILMBASE_HALF_LIBRARY}
+  ${Ilmbase_HALF_LIBRARY}
   ${ZLIB_LIBRARY}
 )
 

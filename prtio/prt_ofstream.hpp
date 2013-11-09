@@ -57,7 +57,7 @@ private:
 		if( value.get_type() == meta_types::type_string ){
 #ifdef _WIN32
 			// Convert to UTF8 before measuring
-			int result = WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, value.get_string(), -1, NULL, 0, NULL, NULL );
+			int result = WideCharToMultiByte( CP_UTF8, MB_ERR_INVALID_CHARS, value.get_string(), -1, NULL, 0, NULL, NULL );
 			if( result <= 0 ) // If there was an error, return 1 so we can make an empty string.
 				return 1u;
 			return static_cast<std::size_t>( result );
@@ -77,13 +77,13 @@ private:
 			std::vector<char> convertedString;
 
 			// Convert to UTF8 before measuring
-			int result = WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, pString, -1, NULL, 0, NULL, NULL );
+			int result = WideCharToMultiByte( CP_UTF8, MB_ERR_INVALID_CHARS, pString, -1, NULL, 0, NULL, NULL );
 			if( result <= 0 ){
 				convertedString.push_back( '\0' );
 			}else{
 				convertedString.assign( static_cast<std::size_t>( result ), '\0' );
 				
-				result = WideCharToMultiByte( CP_UTF8, WC_ERR_INVALID_CHARS, pString, -1, &convertedString.front(), result, NULL, NULL );
+				result = WideCharToMultiByte( CP_UTF8, MB_ERR_INVALID_CHARS, pString, -1, &convertedString.front(), result, NULL, NULL );
 			}
 			
 			m_fout.write( &convertedString.front(), convertedString.size() );
@@ -199,9 +199,12 @@ private:
 		}
 		
 		this->write_stop_chunk();
-		
-		assert( m_fout.tellp() == static_cast<std::streamsize>(header.headerLength) );
 
+#ifdef WIN32		
+		assert( static_cast<std::streamsize>(m_fout.tellp()) == static_cast<std::streamsize>(header.headerLength) );
+#else
+		assert( m_fout.tellp() == static_cast<std::streamsize>(header.headerLength) );
+#endif // WIN32
 		// Write the reserved bytes
 		prt_int32 reservedInt = 4;
 		m_fout.write(reinterpret_cast<const char*>(&reservedInt), 4);

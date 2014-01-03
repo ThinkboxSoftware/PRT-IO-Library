@@ -1,1 +1,3 @@
 To build PRT-IO-Library run the cmake program in the cmake subdirectory of the project.
+
+Note that ZLib and ILMBase must be built and installed, and cmake must be capable of finding them. If you are on Windows, you will need to create FindILMBase.cmake and FindZLIB.cmake in the "cmake/Modules" directory to properly link those libaries.

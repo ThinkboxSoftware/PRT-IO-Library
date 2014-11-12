@@ -72,7 +72,7 @@ namespace detail{
 		std::size_t length = 1;
 		
 		while( *++name != '\0' ){
-			if( ++length >= 32 || (!std::isalnum(*name) && *name == '_') )
+			if( ++length >= 32 || (!std::isalnum(*name) && !*name == '_') )
 				return false;
 		}
 		

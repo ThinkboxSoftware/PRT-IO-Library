@@ -100,7 +100,7 @@ namespace data_types{
 	};
 
 	//This global array maps from enum_t values to names. For example the name for type_float32 is names[type_float32].
-	const char* names[] = {
+	static const char* names[] = {
 		"int16", "int32", "int64",
 		"float16", "float32", "float64",
 		"uint16", "uint32", "uint64",
@@ -149,7 +149,7 @@ namespace data_types{
 	/**
 	 * Extracts a data_type::enum_t from a string representation.
 	 */
-	std::pair<enum_t,std::size_t> parse_data_type( const std::string& typeString ){
+	inline std::pair<enum_t,std::size_t> parse_data_type( const std::string& typeString ){
 		std::string::const_iterator it = typeString.begin(), itEnd = typeString.end();
 
 		//Skip beginning whitespace

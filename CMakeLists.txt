@@ -6,7 +6,7 @@ project(PRT-IO-Library)
 
 # We can place facility-specific Find<BlahBlah>.cmake files in this subdirectory. Mostly used
 # to specify package locations on Windows builds since there isn't a known place to look.
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/Modules/")
+# set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/Modules/")
 
 if(USE_HOUDINI)
   find_package(HDK REQUIRED)
@@ -41,7 +41,6 @@ endif()
 
 if ( MSVC )
   if(USE_HOUDINI)
-	message("HELLO")
 	add_definitions(-DHALF_EXPORTS -DOPENEXR_DLL)
   endif()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc /Zi")

@@ -22,9 +22,14 @@ include_directories(.)
 # INCLUDE_DIRECTORIES ( ${ZLIB_INCLUDE_DIRS} )
 
 if(USE_HOUDINI)
+  if(MSVC)
+	set(ZLIB_LIBRARY zdll)
+  else()
+	set(ZLIB_LIBRARY z)
+  endif()
   set(REQUIRED_LINK_LIBRARIES
     Half
-    zdll
+    ${ZLIB_LIBRARY}
     )
 else()
   set(REQUIRED_LINK_LIBRARIES
